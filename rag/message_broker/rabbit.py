@@ -22,3 +22,6 @@ class MessageServiceInterface(ABC):
     @abstractmethod
     async def close_connection(self) -> None:
         raise NotImplementedError
+
+
+class RabbitService(MessageServiceInterface): ...
