@@ -1,12 +1,9 @@
 services:
-  chroma:
-    image: ghcr.io/chroma-core/chroma:latest
-    environment:
-      - ALLOW_RESET=true
-    volumes:
-      - chroma_data:/chroma/chroma
-    ports:
-      - "8000:8000"
-
-volumes:
-  chroma_data:
+  
+  rag:
+    container_name: rag
+    build:
+      context: .
+    command: sh -c "python -m rag"
+    restart: always
+    env_file: .env

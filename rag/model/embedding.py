@@ -49,18 +49,14 @@ class Embedding(Embeddings):
 
         payload = {"model": self.model, "input": text}
 
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    self.api_url + "v1/embeddings",
-                    headers=headers,
-                    json=payload,
-                    timeout=60.0,
-                )
-                response.raise_for_status()
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                self.api_url + "v1/embeddings",
+                headers=headers,
+                json=payload,
+                timeout=60.0,
+            )
+            response.raise_for_status()
 
-                result = response.json()
-                return result["data"][0]["embedding"]
-
-        except Exception as e:
-            raise RuntimeError(f"Error calling LLM API: {e}")
+            result = response.json()
+            return result["data"][0]["embedding"]
