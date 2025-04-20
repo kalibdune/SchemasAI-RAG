@@ -20,20 +20,6 @@ class BaseConfig(_BaseSettings):
     )
 
 
-class JsonConfig(_BaseSettings):
-    model_config = SettingsConfigDict(
-        extra="allow",
-        env_file_encoding="utf-8",
-        json_schema_extra={"format_settings": {"hide_docs": True}},
-    )
-
-    @classmethod
-    def from_json(cls, json_path: str):
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return cls(**data)
-
-
 class LLM(BaseConfig, env_prefix="LLM_"):
     model: str
     temperature: float
@@ -53,10 +39,6 @@ class API(BaseConfig, env_prefix="API_"):
     key: SecretStr
 
 
-class PropmtpsTable(JsonConfig):
-    coordinator: str
-
-
 class Document(BaseConfig, env_prefix="DOC_"):
     path: AnyUrl | FilePath
 
@@ -65,6 +47,13 @@ class DB(BaseConfig, env_prefix="DB_"):
     host: str
     port: int
 
+class Redis(BaseConfig, env_prefix="REDIS_"):
+    host: str
+    port: int
+
+    @property
+    def get_redis_url(self):
+        return f"redis://{self.host}:{self.port}"
 
 class Config(BaseConfig):
     document: Document
@@ -73,7 +62,7 @@ class Config(BaseConfig):
     thinking_llm: ThinkingLLM
     embedding: Embedding
     api: API
-    propmpts_table: PropmtpsTable
+    redis: Redis
 
 
 config = Config(
@@ -83,5 +72,5 @@ config = Config(
     thinking_llm=ThinkingLLM(),
     embedding=Embedding(),
     api=API(),
-    propmpts_table=PropmtpsTable.from_json(BASE_PATH / "static" / "prompts.json"),
+    redis=Redis()
 )

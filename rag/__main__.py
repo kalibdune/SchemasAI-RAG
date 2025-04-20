@@ -1,68 +1,53 @@
-import os
+import asyncio
+import logging
+from rag.agents.coordinator import CoordinatorAnswer, CoordinatorAgent
+from rag.agents.schema_creator import SchemaCreatorAgent
+from rag.model.regular_llm import RegularLLM
+from rag.model.embedding import Embedding
+from rag.store.vector import VectorStoreManager
+from dataclasses import dataclass
+from rag.config import config
 
-from langchain.chains.retrieval_qa.base import RetrievalQA
-from langchain.prompts import PromptTemplate
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import TextLoader
-from langchain_community.vectorstores import FAISS
 
-prompt_template = PromptTemplate(
-    input_variables=["context", "question"],
-    template="""
-        Ты — дружелюбный, заботливый и внимательный ассистент поддержки вымышленной кофейни «Дрова и Зёрна». Твоя задача — отвечать на вопросы клиентов из предоставленной информаци. Отвечай на вопросы сухо и кратко на столько, на сколько возможно без потери смысла. В каждом сообщении будь вежливым и желай пользователю хорошего настроения. Если не можешь найти подходящей информации в контексте ответь: \"не знаю\"
-        Контекст:
-        {context}
-
-        Вопрос: {question}
-        Ответ:
-    """,
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('rag.log'),
+        logging.StreamHandler()
+    ]
 )
 
-# 1. Загружаем документы из файла
-loader = TextLoader("my_docs.txt")
-documents = loader.load()
+logger = logging.getLogger(__name__)
 
-splitter = RecursiveCharacterTextSplitter(chunk_size=150, chunk_overlap=20)
-documents = splitter.split_documents(documents)
-print("parts len: ", len(documents))
-# 2. Создаем эмбеддинги с помощью модели sentence-transformers
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-# embeddings = OllamaEmbeddings(model="nomic-embed-text")
-try:
-    print("try to load")
-    vectorstore = FAISS.load_local(
-        "./db", embeddings, allow_dangerous_deserialization=True
-    )
-    print("loaded")
-except Exception as e:
-    print("save\n", e)
-    vectorstore = FAISS.from_documents(documents, embeddings)
-    vectorstore.save_local("./db")
+@dataclass
+class Agents:
+    coordinator: CoordinatorAgent
+    creator: SchemaCreatorAgent
 
 
-# appropriate = vectorstore.similarity_search("как по шагам работает RAG?", 4)
-# [print(page.page_content) for page in appropriate]
+def setup_agent():
+    llm = RegularLLM()
+    embedding = Embedding()
+    store = VectorStoreManager(embedding)
 
-llm = OllamaLLM(
-    model="llama3.2",
-    temperature=0.1,
-)
+    coordinator = CoordinatorAgent(llm, embedding)
+    creator = SchemaCreatorAgent(llm, store)
+
+    return Agents(coordinator, creator)
 
 
-qa = RetrievalQA.from_chain_type(
-    llm=llm,
-    retriever=vectorstore.as_retriever(),
-    chain_type_kwargs={"prompt": prompt_template},
-)
+req = """Создай интеграцию, которая обращается к HTTP API по адресу https://api.example.com/data методом POST, передавая JSON {"userId": 12345, "includeDetails": true} с заголовками Authorization: Bearer abcdef123456 и Content-Type: application/json. Ответ от API представляет собой массив JSON-объектов с полями id, name, email, phone. Каждый объект должен быть преобразован в XML в виде: <userData><id>001</id><name>John Doe</name><email>john@example.com</email><phone>+1234567890</phone></userData>. Эти XML-сообщения необходимо отправлять в Kafka-брокер kafka-broker:9092 в топик user-xml-topic как строку без сериализации. При ошибке запроса к API необходимо сделать до 3 повторных попыток с интервалом 5 секунд между ними. Если отправка в Kafka не удалась, сообщение и текст ошибки должны быть записаны в файл error.log в формате: timestamp, XML-сообщение, текст ошибки. JSON-схема описывает структуру тела запроса: объект с полями userId (целое число) и includeDetails (булево значение), и структуру ответа: массив объектов с обязательными строковыми полями id, name, email, phone. XML-сообщения создаются строго по этой структуре. JSON-схема описывает только данные, а не конфигурацию интеграции."""
 
-while True:
-    query = input("Введите ваш вопрос (или 'выход' для завершения): ")
+async def main():
+    agents = setup_agent()
+    coord_response: CoordinatorAnswer = await agents.coordinator.process({"query": req})
+    logger.info(f"response from coordinator: {str(coord_response)}")
 
-    appropriate = vectorstore.similarity_search(query)
-    print("\n", "\n".join([page.page_content for page in appropriate]), "\n")
-
-    if query.lower() in ["q", "выход"]:
-        print("Завершение программы.")
-        break
-    answer = qa.invoke({"query": query})
-    print("Ответ:", answer["result"])
+    if coord_response.action == "create":
+        creator_response = await agents.creator.process({"query": coord_response.query})
+        logger.info(f"response from creator: {creator_response}")
+    else:
+        logger.info("#########")
+    
+asyncio.run(main())
