@@ -61,14 +61,14 @@ class Document(BaseConfig, env_prefix="DOC_"):
     path: AnyUrl | FilePath
 
 
-class ChromaDB(BaseConfig, env_prefix="DB_"):
+class DB(BaseConfig, env_prefix="DB_"):
     host: str
     port: int
 
 
 class Config(BaseConfig):
     document: Document
-    chroma: ChromaDB
+    db: DB
     llm: LLM
     thinking_llm: ThinkingLLM
     embedding: Embedding
@@ -77,7 +77,7 @@ class Config(BaseConfig):
 
 
 config = Config(
-    chroma=ChromaDB(),
+    db=DB(),
     document=Document(),
     llm=LLM(),
     thinking_llm=ThinkingLLM(),

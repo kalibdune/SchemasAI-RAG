@@ -5,10 +5,6 @@ from langchain.prompts import PromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader
 from langchain_community.vectorstores import FAISS
-from langchain_core.language_models import LLM
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_ollama import OllamaLLM
-from langchain_ollama.embeddings import OllamaEmbeddings
 
 prompt_template = PromptTemplate(
     input_variables=["context", "question"],
