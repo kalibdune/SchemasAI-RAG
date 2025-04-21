@@ -1,27 +1,52 @@
-from abc import ABC, abstractmethod
+import logging
+
+from aio_pika import Message, connect
+from aio_pika.abc import (
+    AbstractChannel,
+    AbstractConnection,
+    AbstractIncomingMessage,
+    AbstractQueue,
+)
+
+from rag.config import config
+
+logger = logging.getLogger(__name__)
 
 
-class MessageServiceInterface(ABC):
+class RabbitServerService:
+    connection: AbstractConnection
+    channel: AbstractChannel
+    queue: AbstractQueue
 
-    @abstractmethod
-    async def connect(self, host: str, port: int, username: str, password: str) -> None:
-        raise NotImplementedError
+    def __init__(self, queue_name: str, url: str = config.rabbit.get_url) -> None:
+        self.url = url
+        self.queue_name = queue_name
 
-    @abstractmethod
-    async def publish_message(self, queue: str, message: dict) -> None:
-        raise NotImplementedError
+    async def connect(self) -> "RabbitServerService":
+        self.connection = await connect(self.url)
+        self.channel = await self.connection.channel()
+        self.queue = await self.channel.declare_queue(self.queue_name, durable=True)
+        return self
 
-    @abstractmethod
-    async def acknowledge_message(self, delivery_tag: str) -> None:
-        raise NotImplementedError
+    async def message_handler(self, callback) -> None:
+        logger.info("Waiting for messages...")
+        async with self.queue.iterator() as qiterator:
+            message: AbstractIncomingMessage
+            async for message in qiterator:
+                try:
+                    async with message.process(requeue=False):
+                        assert message.reply_to is not None
 
-    @abstractmethod
-    async def message_dispatcher(self, message: dict) -> None:
-        raise NotImplementedError
+                        response = await callback(message.body.decode("utf-8"))
 
-    @abstractmethod
-    async def close_connection(self) -> None:
-        raise NotImplementedError
-
-
-class RabbitService(MessageServiceInterface): ...
+                        await self.channel.default_exchange.publish(
+                            Message(
+                                body=response.encode("utf-8"),
+                                correlation_id=message.correlation_id,
+                                content_type="application/json",
+                            ),
+                            routing_key=message.reply_to,
+                        )
+                        print("Request completed")
+                except Exception:
+                    logging.exception("Processing error for message %r", message)

@@ -1,4 +1,3 @@
-import json
 import os
 import time
 from pathlib import Path
@@ -43,34 +42,31 @@ class Document(BaseConfig, env_prefix="DOC_"):
     path: AnyUrl | FilePath
 
 
-class DB(BaseConfig, env_prefix="DB_"):
+class RabbitConfig(BaseConfig, env_prefix="RABBIT_"):
     host: str
-    port: int
-
-class Redis(BaseConfig, env_prefix="REDIS_"):
-    host: str
+    user: str
+    password: SecretStr
     port: int
 
     @property
-    def get_redis_url(self):
-        return f"redis://{self.host}:{self.port}"
+    def get_url(self) -> str:
+        return f"amqp://{self.user}:{self.password.get_secret_value()}@{self.host}:{self.port}/"
+
 
 class Config(BaseConfig):
     document: Document
-    db: DB
     llm: LLM
     thinking_llm: ThinkingLLM
     embedding: Embedding
     api: API
-    redis: Redis
+    rabbit: RabbitConfig
 
 
 config = Config(
-    db=DB(),
     document=Document(),
     llm=LLM(),
     thinking_llm=ThinkingLLM(),
     embedding=Embedding(),
     api=API(),
-    redis=Redis()
+    rabbit=RabbitConfig(),
 )
